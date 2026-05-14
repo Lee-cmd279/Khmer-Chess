@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>អុកចត្រង្គ — Ouk Chaktrang</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    background: #0a0804;
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(180,120,20,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 70%, rgba(100,60,10,0.06) 0%, transparent 60%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Georgia, serif;
+    color: #e8cc90;
+  }
+
+  .card {
+    background: #120f08;
+    border: 1px solid rgba(212,168,76,0.35);
+    border-radius: 14px;
+    padding: 40px 36px 36px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow:
+      0 0 0 1px rgba(212,168,76,0.08),
+      0 8px 60px rgba(0,0,0,0.8),
+      inset 0 1px 0 rgba(255,220,120,0.06);
+    text-align: center;
+  }
+
+  .emblem {
+    font-size: 48px;
+    margin-bottom: 6px;
+    filter: drop-shadow(0 0 12px rgba(212,168,76,0.4));
+  }
+
+  .title-kh {
+    font-size: 22px;
+    color: #d4a84c;
+    letter-spacing: 3px;
+    margin-bottom: 2px;
+  }
+
+  .title-en {
+    font-size: 11px;
+    color: #6a5030;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(212,168,76,0.15);
+    margin: 0 0 24px;
+  }
+
+  label {
+    display: block;
+    font-size: 10px;
+    color: #6a5030;
+    letter-spacing: 2px;
+    text-align: left;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(212,168,76,0.2);
+    border-radius: 6px;
+    color: #e8cc90;
+    font-size: 14px;
+    font-family: Georgia, serif;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    outline: none;
+    transition: border-color 0.2s;
+    min-height: 44px;
+  }
+
+  input:focus { border-color: rgba(212,168,76,0.55); }
+  input::placeholder { color: #3a2e1a; }
+
+  .btn {
+    width: 100%;
+    background: rgba(212,168,76,0.16);
+    border: 1px solid rgba(212,168,76,0.45);
+    border-radius: 7px;
+    color: #e8cc90;
+    font-size: 13px;
+    font-family: Georgia, serif;
+    letter-spacing: 2px;
+    padding: 13px;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+    min-height: 46px;
+    text-transform: uppercase;
+  }
+
+  .btn:hover {
+    background: rgba(212,168,76,0.28);
+    box-shadow: 0 0 20px rgba(212,168,76,0.15);
+  }
+
+  .btn:active { transform: scale(0.98); }
+
+  .error {
+    color: #f87171;
+    font-size: 11px;
+    letter-spacing: 1px;
+    min-height: 18px;
+    margin-bottom: 12px;
+    transition: opacity 0.3s;
+  }
+
+  .footer {
+    margin-top: 24px;
+    font-size: 9px;
+    color: #2a2010;
+    letter-spacing: 1px;
+  }
+
+  /* Loading overlay after successful login */
+  .loading {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #0a0804;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    z-index: 999;
+  }
+  .loading.on { display: flex; }
+  .loading-text { color: #d4a84c; font-size: 13px; letter-spacing: 3px; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 2px solid rgba(212,168,76,0.15);
+    border-top-color: #d4a84c;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="emblem">♟</div>
+  <div class="title-kh">អុកចត្រង្គ</div>
+  <div class="title-en">Ouk Chaktrang</div>
+  <hr class="divider">
+
+  <label for="usr">Username</label>
+  <input type="text" id="usr" placeholder="Enter username" autocomplete="username" />
+
+  <label for="pw">Password</label>
+  <input type="password" id="pw" placeholder="Enter password" autocomplete="current-password"
+         onkeydown="if(event.key==='Enter') doLogin()" />
+
+  <div class="error" id="err"></div>
+
+  <button class="btn" onclick="doLogin()">&#9654;&nbsp; Enter Game</button>
+
+  <div class="footer">Khmer Chess · AI Learning Engine v5</div>
+</div>
+
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Loading game...</div>
+</div>
+
+<script>
+// ============================================================
+// USERS — edit this list to add/remove players
+// Format: { user: 'username', pass: 'password', role: 'player'|'admin' }
+// ============================================================
+var USERS = [
+  { user: 'admin',   pass: 'OukAdmin2025', role: 'admin'  },
+  { user: 'player1', pass: 'chess123',     role: 'player' },
+  { user: 'player2', pass: 'chess456',     role: 'player' },
+  { user: 'guest',   pass: 'guest',        role: 'player' },
+];
+// ============================================================
+
+var MAX_ATTEMPTS = 5;
+var LOCKOUT_MS   = 5 * 60 * 1000; // 5 minutes
+
+function getAttempts() {
+  try {
+    var d = JSON.parse(sessionStorage.getItem('ouk_login_attempts') || '{}');
+    return d;
+  } catch(e) { return {}; }
+}
+
+function recordFail() {
+  var d = getAttempts();
+  d.count = (d.count || 0) + 1;
+  d.last  = Date.now();
+  sessionStorage.setItem('ouk_login_attempts', JSON.stringify(d));
+}
+
+function isLockedOut() {
+  var d = getAttempts();
+  if (!d.count || d.count < MAX_ATTEMPTS) return false;
+  return (Date.now() - d.last) < LOCKOUT_MS;
+}
+
+function clearAttempts() {
+  sessionStorage.removeItem('ouk_login_attempts');
+}
+
+function showErr(msg) {
+  var el = document.getElementById('err');
+  el.textContent = msg;
+  setTimeout(function(){ el.textContent=''; }, 4000);
+}
+
+function doLogin() {
+  var usr = document.getElementById('usr').value.trim();
+  var pw  = document.getElementById('pw').value;
+
+  if (!usr || !pw) { showErr('Please enter username and password.'); return; }
+
+  if (isLockedOut()) {
+    showErr('Too many attempts. Wait 5 minutes.');
+    return;
+  }
+
+  // Find matching user (case-insensitive username)
+  var match = null;
+  for (var i = 0; i < USERS.length; i++) {
+    if (USERS[i].user.toLowerCase() === usr.toLowerCase() && USERS[i].pass === pw) {
+      match = USERS[i];
+      break;
+    }
+  }
+
+  if (!match) {
+    recordFail();
+    var d = getAttempts();
+    var left = MAX_ATTEMPTS - d.count;
+    showErr(left > 0 ? 'Wrong username or password. (' + left + ' attempts left)' : 'Account locked for 5 minutes.');
+    document.getElementById('pw').value = '';
+    return;
+  }
+
+  // Success
+  clearAttempts();
+  sessionStorage.setItem('ouk_auth', JSON.stringify({
+    user: match.user,
+    role: match.role,
+    time: Date.now()
+  }));
+
+  // Show loading then redirect to game
+  document.getElementById('loading').classList.add('on');
+  setTimeout(function(){
+    window.location.href = 'game.html';
+  }, 800);
+}
+</script>
+</body>
+</html>
