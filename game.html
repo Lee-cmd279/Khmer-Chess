@@ -184,6 +184,7 @@ input[type=text]{font-family:Georgia,serif;font-size:14px;padding:10px;backgroun
         <!-- Action buttons -->
         <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">
           <button onclick="pushToCloud()" style="flex:2;font-size:11px;padding:8px 6px;background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.35);color:#6ee7a0;min-height:38px">&#9729; Push to Cloud</button>
+          <button onclick="configureCloud()" style="font-size:10px;padding:6px 10px;min-height:30px;background:rgba(147,197,253,0.1);border-color:rgba(147,197,253,0.3);color:#93c5fd;letter-spacing:1px">&#9881; Configure Cloud</button>
           <button onclick="resetWeights()" style="flex:1;font-size:11px;padding:8px 6px;background:rgba(220,60,60,0.1);border-color:rgba(220,60,60,0.3);color:#f87171;min-height:38px">&#8635; Reset</button>
           <button onclick="exportWeights()" style="flex:1;font-size:11px;padding:8px 6px;background:rgba(96,165,250,0.1);border-color:rgba(96,165,250,0.3);color:#93c5fd;min-height:38px">&#8615; Export</button>
           <button onclick="importWeights()" style="flex:1;font-size:11px;padding:8px 6px;background:rgba(212,168,76,0.1);border-color:rgba(212,168,76,0.3);color:#d4a84c;min-height:38px">&#8613; Import</button>
@@ -2639,6 +2640,79 @@ function exportWeights() {
   cloudPush();
 }
 
+// ============================================================
+// CLOUD SYNC — JSONBin storage
+// Set your keys via Admin panel or hardcode below
+// ============================================================
+var JB = {
+  key: localStorage.getItem('ouk_jb_key') || '',
+  bin: localStorage.getItem('ouk_jb_bin') || '',
+};
+
+function setSyncStatus(msg, ok) {
+  var el = document.getElementById('sync-status');
+  if (el) { el.textContent = msg; el.style.color = ok ? '#6ee7a0' : '#f87171'; }
+}
+
+function cloudFetch() {
+  if (!JB.key || !JB.bin) { setSyncStatus('No cloud config', false); return; }
+  setSyncStatus('Loading from cloud...', true);
+  fetch('https://api.jsonbin.io/v3/b/' + JB.bin + '/latest', {
+    headers: { 'X-Master-Key': JB.key }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var rec = data.record || data;
+    if (rec.nnue && rec.nnue.W1) {
+      AI_NNUE = rec.nnue;
+      AI_NNUE.trained = true;
+      if (!AI_NNUE.policyEnabled) AI_NNUE.policyEnabled = (AI_NNUE.games||0) >= 50;
+    }
+    if (rec.weights) AI_WEIGHTS = rec.weights;
+    if (rec.meta) { AI_META = rec.meta; if (!AI_META.selfPlayGames) AI_META.selfPlayGames=0; }
+    applyWeightsToPV(); lsSave(); updateLearnUI();
+    setSyncStatus('☁ Cloud weights loaded (gen ' + (AI_META.generation||0) + ')', true);
+    trainLog('Cloud weights loaded. NNUE games: ' + (AI_NNUE.games||0));
+  })
+  .catch(function(e) { setSyncStatus('Cloud load failed', false); });
+}
+
+function cloudPush(cb) {
+  if (!JB.key || !JB.bin) {
+    setSyncStatus('No cloud keys — use Admin to configure', false);
+    if (cb) cb(); return;
+  }
+  var payload = JSON.stringify({
+    nnue: AI_NNUE,
+    weights: AI_WEIGHTS,
+    meta: AI_META
+  }, null, 0);
+  fetch('https://api.jsonbin.io/v3/b/' + JB.bin, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Master-Key': JB.key },
+    body: payload
+  })
+  .then(function(r) {
+    if (r.ok) { setSyncStatus('☁ Pushed to cloud!', true); }
+    else { setSyncStatus('Push failed: ' + r.status, false); }
+    if (cb) cb();
+  })
+  .catch(function(e) { setSyncStatus('Push error: ' + e.message, false); if (cb) cb(); });
+}
+
+// Configure cloud keys from admin panel
+function configureCloud() {
+  var key = prompt('Enter your JSONBin Master Key:');
+  if (!key) return;
+  var bin = prompt('Enter your JSONBin Bin ID:');
+  if (!bin) return;
+  JB.key = key.trim(); JB.bin = bin.trim();
+  localStorage.setItem('ouk_jb_key', JB.key);
+  localStorage.setItem('ouk_jb_bin', JB.bin);
+  setSyncStatus('Cloud configured!', true);
+  cloudFetch();
+}
+
 function pushToCloud() {
   cloudPush(function() { updateLearnUI(); });
 }
@@ -2809,6 +2883,14 @@ pushToCloud = function(){ requireAdmin(_origPushToCloud); };
 
 // Initialise on load
 lsLoad();
+// Try to load cloud weights on startup (after a short delay)
+setTimeout(function() {
+  if (JB.key && JB.bin) {
+    cloudFetch();
+  } else {
+    setSyncStatus('No cloud config — weights are local only', false);
+  }
+}, 1500);
 
 // Restore admin session if page was refreshed
 if (checkAdminSession()) adminUnlock();

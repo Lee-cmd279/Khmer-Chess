@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: ouk-chess-trainer
+    runtime: python
+    buildCommand: pip install requests
+    startCommand: python ouk_train.py
+    envVars:
+      - key: JSONBIN_KEY
+        sync: false   # set this in Render dashboard
+      - key: JSONBIN_BIN
+        sync: false   # set this in Render dashboard
