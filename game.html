@@ -2641,13 +2641,11 @@ function exportWeights() {
 }
 
 // ============================================================
-// CLOUD SYNC — JSONBin storage
-// Set your keys via Admin panel or hardcode below
+// CLOUD SYNC — GitHub raw file storage
+// No size limit, no API keys needed for reading
+// Weights file: ouk_weights.json in your GitHub repo
 // ============================================================
-var JB = {
-  key: localStorage.getItem('ouk_jb_key') || '',
-  bin: localStorage.getItem('ouk_jb_bin') || '',
-};
+var GITHUB_RAW = 'https://raw.githubusercontent.com/lee-cmd279/Khmer-Chess/main/ouk_weights.json';
 
 function setSyncStatus(msg, ok) {
   var el = document.getElementById('sync-status');
@@ -2655,62 +2653,36 @@ function setSyncStatus(msg, ok) {
 }
 
 function cloudFetch() {
-  if (!JB.key || !JB.bin) { setSyncStatus('No cloud config', false); return; }
-  setSyncStatus('Loading from cloud...', true);
-  fetch('https://api.jsonbin.io/v3/b/' + JB.bin + '/latest', {
-    headers: { 'X-Master-Key': JB.key }
+  setSyncStatus('Loading from GitHub...', true);
+  // Add cache-busting to always get latest
+  fetch(GITHUB_RAW + '?t=' + Date.now())
+  .then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
   })
-  .then(function(r) { return r.json(); })
   .then(function(data) {
-    var rec = data.record || data;
-    if (rec.nnue && rec.nnue.W1) {
-      AI_NNUE = rec.nnue;
+    if (data.nnue && data.nnue.W1) {
+      AI_NNUE = data.nnue;
       AI_NNUE.trained = true;
       if (!AI_NNUE.policyEnabled) AI_NNUE.policyEnabled = (AI_NNUE.games||0) >= 50;
+      applyWeightsToPV(); lsSave(); updateLearnUI();
+      setSyncStatus('☁ Weights loaded: ' + (AI_NNUE.games||0) + ' games trained', true);
+      trainLog('GitHub weights loaded. NNUE games: ' + (AI_NNUE.games||0));
+    } else {
+      setSyncStatus('No trained weights yet — training in progress', false);
     }
-    if (rec.weights) AI_WEIGHTS = rec.weights;
-    if (rec.meta) { AI_META = rec.meta; if (!AI_META.selfPlayGames) AI_META.selfPlayGames=0; }
-    applyWeightsToPV(); lsSave(); updateLearnUI();
-    setSyncStatus('☁ Cloud weights loaded (gen ' + (AI_META.generation||0) + ')', true);
-    trainLog('Cloud weights loaded. NNUE games: ' + (AI_NNUE.games||0));
   })
-  .catch(function(e) { setSyncStatus('Cloud load failed', false); });
+  .catch(function(e) {
+    setSyncStatus('No cloud weights yet — using local', false);
+  });
 }
 
-function cloudPush(cb) {
-  if (!JB.key || !JB.bin) {
-    setSyncStatus('No cloud keys — use Admin to configure', false);
-    if (cb) cb(); return;
-  }
-  var payload = JSON.stringify({
-    nnue: AI_NNUE,
-    weights: AI_WEIGHTS,
-    meta: AI_META
-  }, null, 0);
-  fetch('https://api.jsonbin.io/v3/b/' + JB.bin, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-Master-Key': JB.key },
-    body: payload
-  })
-  .then(function(r) {
-    if (r.ok) { setSyncStatus('☁ Pushed to cloud!', true); }
-    else { setSyncStatus('Push failed: ' + r.status, false); }
-    if (cb) cb();
-  })
-  .catch(function(e) { setSyncStatus('Push error: ' + e.message, false); if (cb) cb(); });
-}
+// cloudPush not needed — training script pushes via GitHub API
+function cloudPush(cb) { if (cb) cb(); }
 
-// Configure cloud keys from admin panel
+// Keep configureCloud for compatibility but simplified
 function configureCloud() {
-  var key = prompt('Enter your JSONBin Master Key:');
-  if (!key) return;
-  var bin = prompt('Enter your JSONBin Bin ID:');
-  if (!bin) return;
-  JB.key = key.trim(); JB.bin = bin.trim();
-  localStorage.setItem('ouk_jb_key', JB.key);
-  localStorage.setItem('ouk_jb_bin', JB.bin);
-  setSyncStatus('Cloud configured!', true);
-  cloudFetch();
+  alert('Weights load automatically from GitHub. No config needed.');
 }
 
 function pushToCloud() {
@@ -2883,14 +2855,10 @@ pushToCloud = function(){ requireAdmin(_origPushToCloud); };
 
 // Initialise on load
 lsLoad();
-// Try to load cloud weights on startup (after a short delay)
+// Load latest weights from GitHub on every startup
 setTimeout(function() {
-  if (JB.key && JB.bin) {
-    cloudFetch();
-  } else {
-    setSyncStatus('No cloud config — weights are local only', false);
-  }
-}, 1500);
+  cloudFetch();
+}, 2000);
 
 // Restore admin session if page was refreshed
 if (checkAdminSession()) adminUnlock();
